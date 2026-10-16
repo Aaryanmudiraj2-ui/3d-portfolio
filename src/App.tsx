@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+  savePortfolioToCloud,
+  fetchPortfolioFromCloud,
+  getFromLocalRegistry,
+  saveToLocalRegistry,
+  compressImageFile
+} from './services/portfolioStorage';
 import {
   ArrowUpRight,
   Copy,
@@ -17,15 +24,22 @@ import {
   RotateCcw,
   ChevronRight,
   ChevronLeft,
-  Sliders
+  Sliders,
+  Share2,
+  MessageCircle,
+  Instagram,
+  Camera,
+  Upload,
+  RotateCw
 } from 'lucide-react';
 
 // ============================================================================
 // ASSETS & DEFAULT PERSONALIZED DATA FOR AARYAN MUDIRAJ
 // ============================================================================
 
-const HERO_PORTRAIT_URL =
+const HERO_PORTRAIT_MALE_URL =
   'https://shrug-person-78902957.figma.site/_components/v2/d24c01ad3a56fc65e942a1f501eb73db42d7cf9a/Rectangle_40443.81459862.png';
+const HERO_PORTRAIT_FEMALE_URL = '/female-avatar.png';
 
 const MARQUEE_GIFS_ROW_1 = [
   'https://motionsites.ai/assets/hero-space-voyage-preview-eECLH3Yc.gif',
@@ -50,8 +64,8 @@ const MARQUEE_GIFS_ROW_2 = [
   '/assets/aaryan-portfolio-hero.png',
   'https://motionsites.ai/assets/hero-orbit-web3-preview-BXt4OttD.gif',
   'https://motionsites.ai/assets/hero-nexora-preview-cx5HmUgo.gif',
-  // Distributed repeat of Hi I'm Aaryan
-  '/assets/aaryan-portfolio-hero.png',
+  // 3D Female Hero Showcase (21:9)
+  '/assets/female-portfolio-hero.png',
   'https://motionsites.ai/assets/hero-evr-ventures-preview-DZxeVFEX.gif',
   'https://motionsites.ai/assets/hero-planet-orbit-preview-DWAP8Z1P.gif',
   'https://motionsites.ai/assets/hero-new-era-preview-CocuDUm9.gif',
@@ -99,6 +113,7 @@ interface PortfolioProfile {
   roleTitle: string;
   heroTagline: string;
   portraitUrl: string;
+  gender: 'male' | 'female';
   location: string;
   Availability: string;
   collegeOrCompany: string;
@@ -211,9 +226,10 @@ const DEFAULT_PROJECTS_DATA: ProjectItem[] = [
 const AARYAN_DEFAULT_PROFILE: PortfolioProfile = {
   firstName: 'Aaryan',
   fullName: 'Aaryan Manoj Mudiraj',
+  gender: 'male',
   roleTitle: 'Software & AI Creator',
   heroTagline: 'a cs & ai creator driven by crafting striking and unforgettable projects',
-  portraitUrl: HERO_PORTRAIT_URL,
+  portraitUrl: HERO_PORTRAIT_MALE_URL,
   location: 'Nagpur, Maharashtra, India',
   Availability: 'Open to Internships & Hackathons',
   collegeOrCompany: 'B.Tech CSE @ Priyadarshini Bhagwati College of Engineering',
@@ -597,13 +613,15 @@ interface StickyProjectCardProps {
   index: number;
   totalCards: number;
   onInspect: (project: ProjectItem) => void;
+  onEditImages: (project: ProjectItem) => void;
 }
 
 const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
   project,
   index,
   totalCards,
-  onInspect
+  onInspect,
+  onEditImages
 }) => {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(1);
@@ -650,7 +668,7 @@ const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
           willChange: 'transform'
         }}
       >
-        {/* Top Row: Number, Category + Project Name + Tech Pills, Live Project Button */}
+        {/* Top Row: Number, Category + Project Name + Tech Pills, Action Buttons */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8">
           <div className="flex items-center gap-4 sm:gap-8">
             <span
@@ -687,7 +705,16 @@ const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3 self-start lg:self-center">
+          <div className="flex flex-wrap items-center gap-3 self-start lg:self-center">
+            <button
+              type="button"
+              onClick={() => onEditImages(project)}
+              className="rounded-full border border-[#D7E2EA]/40 text-[#D7E2EA] hover:bg-[#D7E2EA]/10 font-medium uppercase tracking-widest px-5 py-3 sm:px-6 sm:py-3.5 text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer transition-colors duration-200"
+              title="Upload or change screenshots for this project"
+            >
+              <Camera className="w-4 h-4 text-[#BBCCD7]" />
+              <span>Edit Images</span>
+            </button>
             <LiveProjectButton onClick={() => onInspect(project)} />
           </div>
         </div>
@@ -706,6 +733,19 @@ const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
                 loading="lazy"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
+              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditImages(project);
+                  }}
+                  className="rounded-full bg-black/80 backdrop-blur-md border border-[#D7E2EA]/50 text-[#D7E2EA] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-lg hover:bg-black hover:border-white transition-all hover:scale-105 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5 text-[#BBCCD7]" />
+                  <span>Change Image</span>
+                </button>
+              </div>
             </div>
             <div
               className="w-full overflow-hidden rounded-[40px] sm:rounded-[50px] md:rounded-[60px] border border-[#D7E2EA]/20 relative group cursor-pointer"
@@ -718,6 +758,19 @@ const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
                 loading="lazy"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
+              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditImages(project);
+                  }}
+                  className="rounded-full bg-black/80 backdrop-blur-md border border-[#D7E2EA]/50 text-[#D7E2EA] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-lg hover:bg-black hover:border-white transition-all hover:scale-105 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5 text-[#BBCCD7]" />
+                  <span>Change Image</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -734,6 +787,19 @@ const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
               loading="lazy"
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditImages(project);
+                }}
+                className="rounded-full bg-black/80 backdrop-blur-md border border-[#D7E2EA]/50 text-[#D7E2EA] px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-lg hover:bg-black hover:border-white transition-all hover:scale-105 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#BBCCD7]" />
+                <span>Change Banner</span>
+              </button>
+            </div>
             <div className="absolute inset-0 bg-gradient-to-t from-[#0C0C0C]/90 via-[#0C0C0C]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6 sm:p-8">
               <p className="text-[#D7E2EA] text-sm sm:text-base font-light leading-relaxed max-w-xl">
                 {project.description}
@@ -747,21 +813,117 @@ const StickyProjectCard: React.FC<StickyProjectCardProps> = ({
 };
 
 // ============================================================================
-// MAIN PORTFOLIO APPLICATION
+// PROFILE URL SERIALIZATION & STORAGE HELPERS
 // ============================================================================
 
 const STORAGE_KEY = 'aaryan_portfolio_visitor_profile_v1';
+
+
+function decodeProfileFromBase64(base64Str: string): PortfolioProfile | null {
+  try {
+    let base64 = base64Str.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const jsonStr = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === 'object' && parsed.firstName) {
+      const gender: 'male' | 'female' = parsed.gender === 'female' ? 'female' : 'male';
+      return {
+        ...AARYAN_DEFAULT_PROFILE,
+        ...parsed,
+        gender,
+        portraitUrl:
+          parsed.portraitUrl && parsed.portraitUrl !== '/female-avatar.jpg'
+            ? parsed.portraitUrl
+            : (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)
+      };
+    }
+  } catch (e) {
+    console.error('Failed to decode profile from base64', e);
+  }
+  return null;
+}
+
+function generateProfileSlug(fullName: string, firstName: string): string {
+  const name = fullName.trim() || firstName.trim() || 'creator';
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'creator'
+  );
+}
+
+// ============================================================================
+// MAIN PORTFOLIO APPLICATION
+// ============================================================================
 
 export default function App() {
   const marqueeRef = useRef<HTMLElement | null>(null);
   const [marqueeOffset, setMarqueeOffset] = useState(0);
 
-  // Active Portfolio Profile State (Defaults to Aaryan Mudiraj)
+  // Active Portfolio Profile State (Defaults to Aaryan Mudiraj or URL/localStorage)
   const [profile, setProfile] = useState<PortfolioProfile>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const idParam = params.get('id');
+        if (idParam) {
+          const cached = getFromLocalRegistry(idParam);
+          if (cached) {
+            const gender: 'male' | 'female' = cached.gender === 'female' ? 'female' : 'male';
+            return {
+              ...AARYAN_DEFAULT_PROFILE,
+              ...cached,
+              gender,
+              portraitUrl:
+                cached.portraitUrl && cached.portraitUrl !== '/female-avatar.jpg'
+                  ? cached.portraitUrl
+                  : (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)
+            };
+          }
+        }
+        const creatorParam = params.get('creator');
+        if (creatorParam) {
+          const cached = getFromLocalRegistry(creatorParam);
+          if (cached) {
+            const gender: 'male' | 'female' = cached.gender === 'female' ? 'female' : 'male';
+            return {
+              ...AARYAN_DEFAULT_PROFILE,
+              ...cached,
+              gender,
+              portraitUrl:
+                cached.portraitUrl && cached.portraitUrl !== '/female-avatar.jpg'
+                  ? cached.portraitUrl
+                  : (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)
+            };
+          }
+        }
+        const dataParam = params.get('data');
+        if (dataParam) {
+          const decoded = decodeProfileFromBase64(dataParam);
+          if (decoded) return decoded;
+        }
+      }
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        const gender: 'male' | 'female' = parsed.gender === 'female' ? 'female' : 'male';
+        return {
+          ...AARYAN_DEFAULT_PROFILE,
+          ...parsed,
+          gender,
+          portraitUrl:
+            parsed.portraitUrl && parsed.portraitUrl !== '/female-avatar.jpg'
+              ? parsed.portraitUrl
+              : (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)
+        };
       }
     } catch {
       // Ignore storage errors
@@ -771,11 +933,25 @@ export default function App() {
 
   const [isCustomVisitor, setIsCustomVisitor] = useState<boolean>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('id') || params.get('creator') || params.get('data')) return true;
+      }
       return Boolean(localStorage.getItem(STORAGE_KEY));
     } catch {
       return false;
     }
   });
+
+  // Unique ID of currently saved cloud share
+  const [activeShareId, setActiveShareId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('id') || '';
+    }
+    return '';
+  });
+  const [isSavingShare, setIsSavingShare] = useState<boolean>(false);
 
   // Visitor Q&A Customizer Wizard State
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -784,7 +960,14 @@ export default function App() {
   const [draftProfile, setDraftProfile] = useState<PortfolioProfile>(profile);
   const [builderBannerToast, setBuilderBannerToast] = useState<string | null>(null);
 
+  // Share Modal State
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const [copiedInstagram, setCopiedInstagram] = useState(false);
+
   const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
+  const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
+  const [uploadingSlot, setUploadingSlot] = useState<string | null>(null);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [expandedService, setExpandedService] = useState<string | null>('01');
@@ -795,6 +978,85 @@ export default function App() {
     message: ''
   });
   const [formSubmitted, setFormSubmitted] = useState(false);
+
+  // Decode or fetch custom profile from URL parameters on page load
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const idParam = params.get('id');
+      const creatorParam = params.get('creator');
+      const dataParam = params.get('data');
+
+      // 1. Unique Cloud ID in URL (?id=ff8081...)
+      if (idParam) {
+        setActiveShareId(idParam);
+        fetchPortfolioFromCloud(idParam).then((cloudData) => {
+          if (cloudData) {
+            const gender: 'male' | 'female' = cloudData.gender === 'female' ? 'female' : 'male';
+            const merged: PortfolioProfile = {
+              ...AARYAN_DEFAULT_PROFILE,
+              ...cloudData,
+              gender,
+              portraitUrl:
+                cloudData.portraitUrl && cloudData.portraitUrl !== '/female-avatar.jpg'
+                  ? cloudData.portraitUrl
+                  : (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)
+            };
+            setProfile(merged);
+            setDraftProfile(merged);
+            setIsCustomVisitor(true);
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            } catch {}
+            setBuilderBannerToast(`Viewing custom 3D portfolio for ${merged.fullName}!`);
+            setTimeout(() => setBuilderBannerToast(null), 4000);
+          }
+        });
+        return;
+      }
+
+      // 2. Creator Slug in URL (?creator=slug)
+      if (creatorParam && !dataParam) {
+        const cached = getFromLocalRegistry(creatorParam);
+        if (cached) {
+          const gender: 'male' | 'female' = cached.gender === 'female' ? 'female' : 'male';
+          const merged: PortfolioProfile = {
+            ...AARYAN_DEFAULT_PROFILE,
+            ...cached,
+            gender,
+            portraitUrl:
+              cached.portraitUrl && cached.portraitUrl !== '/female-avatar.jpg'
+                ? cached.portraitUrl
+                : (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)
+          };
+          setProfile(merged);
+          setDraftProfile(merged);
+          setIsCustomVisitor(true);
+          setBuilderBannerToast(`Viewing custom 3D portfolio for ${merged.fullName}!`);
+          setTimeout(() => setBuilderBannerToast(null), 4000);
+          return;
+        }
+      }
+
+      // 3. Fallback backward compatibility for legacy ?data=<base64>
+      if (dataParam) {
+        const decoded = decodeProfileFromBase64(dataParam);
+        if (decoded) {
+          setProfile(decoded);
+          setDraftProfile(decoded);
+          setIsCustomVisitor(true);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(decoded));
+          } catch {}
+          setBuilderBannerToast(`Viewing custom 3D portfolio for ${decoded.fullName}!`);
+          setTimeout(() => setBuilderBannerToast(null), 4000);
+        }
+      }
+    } catch (e) {
+      console.error('Error hydrating profile from URL on mount', e);
+    }
+  }, []);
 
   // Dynamically update document title whenever profile changes
   useEffect(() => {
@@ -901,27 +1163,126 @@ export default function App() {
     setDraftProfile((prev) => ({ ...prev, aboutText: generated }));
   };
 
+  // Computed clean, clutter-free URL for sharing the current portfolio profile
+  const currentShareUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    const slug = generateProfileSlug(profile.fullName, profile.firstName);
+    if (activeShareId) {
+      return `${origin}${pathname}?id=${encodeURIComponent(activeShareId)}`;
+    }
+    return `${origin}${pathname}?creator=${encodeURIComponent(slug)}`;
+  }, [profile.fullName, profile.firstName, activeShareId]);
+
+  const handleCopyShareLink = useCallback(() => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentShareUrl);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = currentShareUrl;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = currentShareUrl;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 2500);
+  }, [currentShareUrl]);
+
+  const handleCopyInstagramCaption = useCallback(() => {
+    const caption = `🚀 My New 3D Interactive Portfolio is Live!\n✨ ${profile.fullName} — ${profile.roleTitle}\n📍 ${profile.location} (${profile.collegeOrCompany})\n🔗 Experience the 3D site live (link in bio):\n${currentShareUrl}`;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(caption);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = caption;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = caption;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedInstagram(true);
+    setTimeout(() => setCopiedInstagram(false), 2500);
+  }, [profile.fullName, profile.roleTitle, profile.location, profile.collegeOrCompany, currentShareUrl]);
+
   // Save & Apply Visitor Profile
   const handleApplyVisitorProfile = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanedFirst = draftProfile.firstName.trim() || 'Creator';
     const cleanedFull = draftProfile.fullName.trim() || cleanedFirst;
+    const gender: 'male' | 'female' = draftProfile.gender === 'female' ? 'female' : 'male';
+    const portraitUrl =
+      draftProfile.portraitUrl ||
+      (gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL);
+
     const updated: PortfolioProfile = {
       ...draftProfile,
       firstName: cleanedFirst,
-      fullName: cleanedFull
+      fullName: cleanedFull,
+      gender,
+      portraitUrl
     };
+
     setProfile(updated);
+    setDraftProfile(updated);
     setIsCustomVisitor(true);
     setIsBuilderOpen(false);
+
+    const slug = generateProfileSlug(cleanedFull, cleanedFirst);
+
+    // 1. Immediately update browser URL to clean, clutter-free URL (NO base64!)
+    if (typeof window !== 'undefined') {
+      const cleanUrl = `${window.location.origin}${window.location.pathname}?creator=${encodeURIComponent(slug)}`;
+      window.history.replaceState(null, '', cleanUrl);
+    }
+
+    // 2. Persist to localStorage & local registry
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      saveToLocalRegistry(slug, updated);
     } catch {
       // Ignore storage error
     }
+
+    // 3. Open Share Modal with preview card and clean links
+    setIsShareOpen(true);
     setBuilderBannerToast(`Portfolio updated for ${cleanedFull}!`);
     setTimeout(() => setBuilderBannerToast(null), 4000);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // 4. Save to Cloud Database in background to obtain short unique ID (?id=xyz)
+    setIsSavingShare(true);
+    if (typeof window !== 'undefined') {
+      savePortfolioToCloud(updated, window.location.origin, window.location.pathname)
+        .then((saved) => {
+          if (saved && saved.id) {
+            setActiveShareId(saved.id);
+            window.history.replaceState(null, '', saved.shareUrl);
+          }
+        })
+        .finally(() => {
+          setIsSavingShare(false);
+        });
+    }
   };
 
   // Reset back to Aaryan's Original Portfolio
@@ -930,6 +1291,11 @@ export default function App() {
     setDraftProfile(AARYAN_DEFAULT_PROFILE);
     setIsCustomVisitor(false);
     setIsBuilderOpen(false);
+    setIsShareOpen(false);
+    setActiveShareId('');
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -937,6 +1303,54 @@ export default function App() {
     }
     setBuilderBannerToast("Restored Aaryan Mudiraj's default portfolio!");
     setTimeout(() => setBuilderBannerToast(null), 3500);
+  };
+
+  // Save & Apply Project Media (Screenshots & Showcase Images)
+  const handleSaveProjectMedia = (updatedProj: ProjectItem) => {
+    const updatedProjects = profile.projects.map((p) =>
+      p.id === updatedProj.id ? updatedProj : p
+    );
+    const updatedProfile: PortfolioProfile = {
+      ...profile,
+      projects: updatedProjects
+    };
+
+    setProfile(updatedProfile);
+    setDraftProfile((prev) => ({
+      ...prev,
+      projects: prev.projects.map((p) => (p.id === updatedProj.id ? updatedProj : p))
+    }));
+    setIsCustomVisitor(true);
+    setEditingProject(null);
+    setUploadingSlot(null);
+
+    const slug = generateProfileSlug(updatedProfile.fullName, updatedProfile.firstName);
+
+    // 1. Immediately cache in localStorage & local registry
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProfile));
+      saveToLocalRegistry(slug, updatedProfile);
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+
+    // 2. Sync to cloud database for clean short link
+    setIsSavingShare(true);
+    if (typeof window !== 'undefined') {
+      savePortfolioToCloud(updatedProfile, window.location.origin, window.location.pathname)
+        .then((saved) => {
+          if (saved && saved.id) {
+            setActiveShareId(saved.id);
+            window.history.replaceState(null, '', saved.shareUrl);
+          }
+        })
+        .finally(() => {
+          setIsSavingShare(false);
+        });
+    }
+
+    setBuilderBannerToast(`Updated screenshots for ${updatedProj.name}!`);
+    setTimeout(() => setBuilderBannerToast(null), 4000);
   };
 
   const row1Tripled = [...MARQUEE_GIFS_ROW_1, ...MARQUEE_GIFS_ROW_1, ...MARQUEE_GIFS_ROW_1];
@@ -969,39 +1383,55 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Bottom-Right Interactive Bar */}
-      <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2">
+      {/* Centered Floating Pill Dock */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-full bg-[#121316]/90 border border-[#D7E2EA]/30 backdrop-blur-xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] max-w-[95vw]">
+        {/* Share Button (when custom visitor profile active) */}
         {isCustomVisitor && (
           <button
             type="button"
-            onClick={handleResetToAaryan}
-            title="Reset to Aaryan Mudiraj's Portfolio"
-            className="rounded-full bg-[#121316]/95 border border-[#D7E2EA]/40 text-[#D7E2EA] px-4 py-2.5 text-xs uppercase tracking-wider font-medium hover:bg-[#D7E2EA]/15 transition-all shadow-xl inline-flex items-center gap-1.5 cursor-pointer backdrop-blur-md"
+            onClick={() => setIsShareOpen(true)}
+            title="Share your custom 3D Portfolio"
+            className="rounded-full bg-[#1A1C22] border border-[#D7E2EA]/30 text-[#D7E2EA] px-3 py-1.5 sm:px-3.5 sm:py-2 text-[10px] sm:text-xs uppercase tracking-wider font-semibold hover:bg-[#D7E2EA]/15 hover:text-white transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-sm"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset to Aaryan</span>
+            <Share2 className="w-3.5 h-3.5 text-[#B600A8]" />
+            <span>Share</span>
           </button>
         )}
+
+        {/* Try Your Own Details / Edit Details Button */}
         <button
           type="button"
           onClick={openBuilderModal}
-          className="rounded-full text-white font-medium uppercase tracking-wider px-5 py-2.5 sm:px-6 sm:py-3 text-xs sm:text-sm shadow-2xl transition-transform duration-200 hover:scale-105 active:scale-95 inline-flex items-center gap-2 cursor-pointer"
+          className="rounded-full text-white font-medium uppercase tracking-wider px-3.5 py-1.5 sm:px-5 sm:py-2.5 text-[11px] sm:text-xs shadow-xl transition-transform duration-200 hover:scale-105 active:scale-95 inline-flex items-center gap-1.5 sm:gap-2 cursor-pointer whitespace-nowrap"
           style={{
             background:
               'linear-gradient(123deg, #18011F 7%, #B600A8 37%, #7621B0 72%, #BE4C00 100%)',
             boxShadow:
               '0px 4px 14px rgba(181, 1, 167, 0.45), 4px 4px 12px #7721B1 inset',
-            outline: '2px solid #FFFFFF',
-            outlineOffset: '-2px'
+            outline: '1.5px solid #FFFFFF',
+            outlineOffset: '-1.5px'
           }}
         >
-          <Wand2 className="w-4 h-4" />
+          <Wand2 className="w-3.5 h-3.5" />
           <span>
             {isCustomVisitor
               ? `Edit ${profile.firstName}'s Details`
               : 'Try Your Own Details'}
           </span>
         </button>
+
+        {/* Reset to Aaryan Button */}
+        {isCustomVisitor && (
+          <button
+            type="button"
+            onClick={handleResetToAaryan}
+            title="Reset to Aaryan Mudiraj's Portfolio"
+            className="rounded-full bg-[#0C0C0C]/80 border border-[#D7E2EA]/20 text-[#D7E2EA]/80 px-2.5 py-1.5 sm:px-3 sm:py-2 text-[10px] sm:text-xs uppercase tracking-wider font-medium hover:bg-[#D7E2EA]/15 hover:text-white transition-all inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span className="hidden sm:inline">Reset</span>
+          </button>
+        )}
       </div>
 
       {/* ================================================================== */}
@@ -1052,7 +1482,7 @@ export default function App() {
           <div className="overflow-hidden w-full px-2 sm:px-4">
             <FadeIn delay={0.15} y={40}>
               <h1
-                className={`hero-heading font-black uppercase tracking-tight leading-none whitespace-nowrap w-full text-center ${heroFontSizeClass} mt-6 sm:mt-4 md:-mt-5 select-none`}
+                className={`hero-heading font-black uppercase tracking-tight leading-none whitespace-nowrap w-full text-center ${heroFontSizeClass} mt-4 sm:mt-3 md:-mt-2 select-none drop-shadow-md`}
               >
                 Hi, i&apos;m {profile.firstName}
               </h1>
@@ -1061,18 +1491,18 @@ export default function App() {
         </div>
 
         {/* Hero Portrait (Centered Absolutely with Magnetic Effect) */}
-        <div className="absolute left-1/2 -translate-x-1/2 z-10 w-[280px] sm:w-[360px] md:w-[440px] lg:w-[520px] top-1/2 -translate-y-1/2 sm:top-auto sm:translate-y-0 sm:bottom-0 pointer-events-auto">
+        <div className="absolute left-1/2 -translate-x-1/2 z-10 w-[280px] xs:w-[340px] sm:w-[420px] md:w-[500px] lg:w-[580px] xl:w-[640px] bottom-0 pointer-events-auto flex items-end justify-center">
           <FadeIn delay={0.6} y={30}>
             <Magnet
-              padding={150}
-              strength={3}
+              padding={140}
+              strength={2.8}
               activeTransition="transform 0.3s ease-out"
               inactiveTransition="transform 0.6s ease-in-out"
             >
               <img
-                src={profile.portraitUrl || HERO_PORTRAIT_URL}
+                src={profile.portraitUrl || HERO_PORTRAIT_MALE_URL}
                 alt={`${profile.fullName} — ${profile.roleTitle}`}
-                className="w-full h-auto object-contain select-none pointer-events-none"
+                className="w-full max-h-[55vh] sm:max-h-[62vh] md:max-h-[68vh] lg:max-h-[74vh] object-contain object-bottom select-none pointer-events-none drop-shadow-[0_20px_45px_rgba(0,0,0,0.95)]"
               />
             </Magnet>
           </FadeIn>
@@ -1368,6 +1798,7 @@ export default function App() {
               index={index}
               totalCards={profile.projects.length}
               onInspect={(proj) => setSelectedProject(proj)}
+              onEditImages={(proj) => setEditingProject(proj)}
             />
           ))}
         </div>
@@ -1525,6 +1956,93 @@ export default function App() {
               {/* STEP 1: IDENTITY & HERO */}
               {builderStep === 1 && (
                 <div className="space-y-4">
+                  {/* 3D Character Avatar Selector */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-[#BBCCD7] mb-2 flex items-center justify-between">
+                      <span>Choose Your 3D Character Avatar</span>
+                      <span className="text-[10px] text-[#B600A8] uppercase tracking-widest font-semibold">
+                        Selected: {(draftProfile.gender || 'male') === 'female' ? 'Female 3D Avatar' : 'Male 3D Avatar'}
+                      </span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Male 3D Avatar Card */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraftProfile((prev) => ({
+                            ...prev,
+                            gender: 'male',
+                            portraitUrl: HERO_PORTRAIT_MALE_URL
+                          }))
+                        }
+                        className={`group relative p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer overflow-hidden ${
+                          (draftProfile.gender || 'male') === 'male'
+                            ? 'border-[#B600A8] bg-[#B600A8]/15 ring-2 ring-[#B600A8] shadow-[0_0_24px_rgba(182,0,168,0.35)]'
+                            : 'border-[#D7E2EA]/20 bg-[#0C0C0C] hover:border-[#D7E2EA]/50 opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="aspect-square w-full rounded-xl bg-black border border-[#D7E2EA]/10 overflow-hidden flex items-end justify-center mb-2.5 relative">
+                          <img
+                            src={HERO_PORTRAIT_MALE_URL}
+                            alt="Male 3D Avatar"
+                            className="w-full h-full object-contain object-bottom transition-transform duration-300 group-hover:scale-105"
+                          />
+                          {(draftProfile.gender || 'male') === 'male' && (
+                            <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#B600A8] text-white flex items-center justify-center shadow-md">
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#D7E2EA]">
+                            Male 3D Avatar
+                          </span>
+                          <span className="text-[10px] text-[#BBCCD7]/60 uppercase">
+                            Original
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Female 3D Avatar Card */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraftProfile((prev) => ({
+                            ...prev,
+                            gender: 'female',
+                            portraitUrl: HERO_PORTRAIT_FEMALE_URL
+                          }))
+                        }
+                        className={`group relative p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer overflow-hidden ${
+                          draftProfile.gender === 'female'
+                            ? 'border-[#B600A8] bg-[#B600A8]/15 ring-2 ring-[#B600A8] shadow-[0_0_24px_rgba(182,0,168,0.35)]'
+                            : 'border-[#D7E2EA]/20 bg-[#0C0C0C] hover:border-[#D7E2EA]/50 opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="aspect-square w-full rounded-xl bg-black border border-[#D7E2EA]/10 overflow-hidden flex items-end justify-center mb-2.5 relative">
+                          <img
+                            src={HERO_PORTRAIT_FEMALE_URL}
+                            alt="Female 3D Avatar"
+                            className="w-full h-full object-contain object-bottom transition-transform duration-300 group-hover:scale-105"
+                          />
+                          {draftProfile.gender === 'female' && (
+                            <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#B600A8] text-white flex items-center justify-center shadow-md">
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#D7E2EA]">
+                            Female 3D Avatar
+                          </span>
+                          <span className="text-[10px] text-[#BBCCD7]/60 uppercase">
+                            New 3D
+                          </span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs uppercase tracking-wider text-[#BBCCD7] mb-1.5">
                       Q1. Choose a Track / Domain Preset (Auto-fills skills &amp; services)
@@ -1967,6 +2485,41 @@ export default function App() {
                           className="w-full rounded-lg bg-[#121316] border border-[#D7E2EA]/20 p-2 text-xs text-[#D7E2EA]/80"
                           placeholder="Project Description"
                         />
+
+                        {/* Project Screenshots & Showcase Images Customizer */}
+                        <div className="pt-2 border-t border-[#D7E2EA]/15 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 overflow-hidden">
+                            <span className="text-[11px] uppercase tracking-wider text-[#BBCCD7]/70 font-medium">
+                              Media:
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <img
+                                src={proj.col1Image1}
+                                alt="Thumb 1"
+                                className="w-6 h-6 rounded object-cover border border-[#D7E2EA]/20"
+                              />
+                              <img
+                                src={proj.col1Image2}
+                                alt="Thumb 2"
+                                className="w-6 h-6 rounded object-cover border border-[#D7E2EA]/20"
+                              />
+                              <img
+                                src={proj.col2Image}
+                                alt="Main Banner"
+                                className="w-8 h-6 rounded object-cover border border-[#D7E2EA]/20"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setEditingProject(proj)}
+                            className="rounded-full border border-[#D7E2EA]/30 px-3 py-1 text-xs text-[#D7E2EA] hover:bg-[#D7E2EA]/10 inline-flex items-center gap-1.5 cursor-pointer bg-transparent"
+                          >
+                            <Camera className="w-3 h-3 text-[#BBCCD7]" />
+                            <span>Change Images / Upload</span>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2269,6 +2822,382 @@ export default function App() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* MODAL 4: SHARE CUSTOMIZED 3D PORTFOLIO                             */}
+      {/* ================================================================== */}
+      {isShareOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
+          onClick={() => setIsShareOpen(false)}
+        >
+          <div
+            className="bg-[#121316] border-2 border-[#D7E2EA] rounded-[32px] sm:rounded-[44px] max-w-xl w-full p-5 sm:p-8 text-[#D7E2EA] relative max-h-[92vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#D7E2EA]/15">
+              <div>
+                <span className="text-xs uppercase tracking-widest text-[#B600A8] font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>3D Portfolio Share Link Ready</span>
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-black uppercase mt-1">
+                  Share Your Portfolio
+                </h3>
+                <p className="text-xs sm:text-sm text-[#BBCCD7]/80 font-light mt-0.5">
+                  Your personalized 3D site is saved with a clean, short link. Send it to recruiters, friends, or share it on WhatsApp!
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShareOpen(false)}
+                aria-label="Close share modal"
+                className="p-2 rounded-full border border-[#D7E2EA]/30 hover:bg-[#D7E2EA]/10 cursor-pointer bg-transparent text-[#D7E2EA]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* PREVIEW CARD */}
+            <div className="my-5 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#18011F] via-[#121316] to-[#0C0C0C] border border-[#D7E2EA]/25 relative overflow-hidden shadow-inner">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-black border border-[#D7E2EA]/20 overflow-hidden flex-shrink-0 flex items-end justify-center p-1 relative">
+                  <img
+                    src={profile.portraitUrl || (profile.gender === 'female' ? HERO_PORTRAIT_FEMALE_URL : HERO_PORTRAIT_MALE_URL)}
+                    alt={profile.fullName}
+                    className="w-full h-full object-contain object-bottom"
+                  />
+                  <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-black/70 border border-[#D7E2EA]/20 text-[9px] text-[#BBCCD7] font-semibold uppercase">
+                    3D
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-0.5 rounded-full bg-[#B600A8]/20 border border-[#B600A8]/40 text-[#D7E2EA] text-[10px] uppercase tracking-wider font-semibold">
+                      {profile.gender === 'female' ? 'Female 3D Avatar' : 'Male 3D Avatar'}
+                    </span>
+                  </div>
+                  <h4 className="text-base sm:text-lg font-black uppercase truncate text-white">
+                    Hi, i&apos;m {profile.firstName}
+                  </h4>
+                  <p className="text-xs text-[#BBCCD7] truncate font-medium">
+                    {profile.roleTitle}
+                  </p>
+                  <p className="text-[11px] text-[#BBCCD7]/60 truncate font-light mt-0.5">
+                    {profile.collegeOrCompany} • {profile.location}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Share URL Box with Copy Button */}
+            <div className="space-y-2 mb-5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs uppercase tracking-wider text-[#BBCCD7]">
+                  Your Clean Portfolio Link
+                </label>
+                {isSavingShare ? (
+                  <span className="text-[10px] text-[#B600A8] animate-pulse">
+                    Saving to cloud ID...
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-emerald-400 font-medium">
+                    ✦ Clean &amp; Short Link
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 bg-[#0C0C0C] border border-[#D7E2EA]/30 rounded-xl p-1.5 pl-3">
+                <input
+                  type="text"
+                  readOnly
+                  value={currentShareUrl}
+                  className="bg-transparent text-xs text-[#D7E2EA] w-full focus:outline-none truncate font-mono select-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="rounded-lg bg-[#D7E2EA] text-[#0C0C0C] font-semibold px-3.5 py-2 text-xs uppercase tracking-wider hover:opacity-90 inline-flex items-center gap-1.5 cursor-pointer flex-shrink-0 transition-opacity"
+                >
+                  {copiedShareLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Link</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Social Sharing Actions */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+              {/* WhatsApp Share Button */}
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `✨ Check out my new 3D Interactive Portfolio!\n\n` +
+                  `👤 ${profile.fullName} — ${profile.roleTitle}\n` +
+                  `📍 ${profile.location} (${profile.collegeOrCompany})\n\n` +
+                  `👉 Experience the 3D site live here:\n${currentShareUrl}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold uppercase tracking-wider px-4 py-3 text-xs inline-flex items-center justify-center gap-2 transition-all no-underline shadow-sm cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-400" />
+                <span>Share on WhatsApp Group</span>
+              </a>
+
+              {/* Copy for Instagram Button */}
+              <button
+                type="button"
+                onClick={handleCopyInstagramCaption}
+                className="rounded-2xl border border-pink-500/40 bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 font-semibold uppercase tracking-wider px-4 py-3 text-xs inline-flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                {copiedInstagram ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Copied for Instagram!</span>
+                  </>
+                ) : (
+                  <>
+                    <Instagram className="w-4 h-4 text-pink-400" />
+                    <span>Copy for Instagram</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-4 border-t border-[#D7E2EA]/15 flex items-center justify-center text-center">
+              <span className="text-xs text-[#BBCCD7]/70">
+                Crafted with 3D Interactive Portfolio
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* MODAL 5: PROJECT MEDIA & SCREENSHOT EDITOR                         */}
+      {/* ================================================================== */}
+      {editingProject && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
+          onClick={() => {
+            setEditingProject(null);
+            setUploadingSlot(null);
+          }}
+        >
+          <div
+            className="bg-[#121316] border-2 border-[#D7E2EA] rounded-[32px] sm:rounded-[44px] max-w-3xl w-full p-5 sm:p-8 text-[#D7E2EA] relative max-h-[92vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-5 border-b border-[#D7E2EA]/15">
+              <div>
+                <span className="text-xs uppercase tracking-widest text-[#B600A8] font-semibold flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Customize Project Media • {editingProject.number}</span>
+                </span>
+                <h3 className="text-xl sm:text-3xl font-black uppercase mt-1">
+                  {editingProject.name}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#BBCCD7]/80 font-light mt-0.5">
+                  Upload custom screenshots from your computer or paste image links. Changes are automatically optimized and saved to your custom share link.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProject(null);
+                  setUploadingSlot(null);
+                }}
+                aria-label="Close image editor modal"
+                className="p-2 rounded-full border border-[#D7E2EA]/30 hover:bg-[#D7E2EA]/10 cursor-pointer bg-transparent text-[#D7E2EA]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Slots List */}
+            <div className="py-6 space-y-5">
+              {([
+                {
+                  key: 'col1Image1' as const,
+                  title: 'Slot 1: Top Thumbnail Preview'
+                },
+                {
+                  key: 'col1Image2' as const,
+                  title: 'Slot 2: Bottom Thumbnail Preview'
+                },
+                {
+                  key: 'col2Image' as const,
+                  title: 'Slot 3: Main Featured Showcase Banner'
+                }
+              ]).map((slotInfo) => {
+                const currentUrl = editingProject[slotInfo.key];
+                const defaultProj = DEFAULT_PROJECTS_DATA.find((p) => p.id === editingProject.id);
+                const defaultUrl = defaultProj ? defaultProj[slotInfo.key] : '';
+                const isUploading = uploadingSlot === slotInfo.key;
+
+                return (
+                  <div
+                    key={slotInfo.key}
+                    className="p-4 sm:p-5 rounded-2xl bg-[#0C0C0C] border border-[#D7E2EA]/20 space-y-4"
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#BBCCD7]">
+                        {slotInfo.title}
+                      </span>
+                      {defaultUrl && currentUrl !== defaultUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProject((prev) =>
+                              prev ? { ...prev, [slotInfo.key]: defaultUrl } : null
+                            );
+                          }}
+                          className="text-[11px] uppercase tracking-wider text-[#BBCCD7]/70 hover:text-[#D7E2EA] inline-flex items-center gap-1 cursor-pointer bg-transparent border-0"
+                        >
+                          <RotateCw className="w-3 h-3" />
+                          <span>Reset to Default</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                      {/* Live Preview Thumbnail */}
+                      <div className="md:col-span-5 relative rounded-xl overflow-hidden border border-[#D7E2EA]/20 bg-black h-36 flex items-center justify-center">
+                        {currentUrl ? (
+                          <img
+                            src={currentUrl}
+                            alt={slotInfo.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="p-8 text-center text-xs text-[#BBCCD7]/50">
+                            No Image Set
+                          </div>
+                        )}
+                        {isUploading && (
+                          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center gap-2 text-xs font-semibold text-white">
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Compressing...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Upload & URL Controls */}
+                      <div className="md:col-span-7 space-y-3">
+                        {/* File Upload Button */}
+                        <div>
+                          <label className="w-full rounded-xl border border-dashed border-[#D7E2EA]/40 bg-[#121316] hover:bg-[#D7E2EA]/10 px-4 py-2.5 flex items-center justify-center gap-2 cursor-pointer transition-colors group">
+                            <Upload className="w-4 h-4 text-[#BBCCD7] group-hover:text-white" />
+                            <span className="text-xs uppercase tracking-wider font-semibold text-[#D7E2EA]">
+                              Upload File From Device
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setUploadingSlot(slotInfo.key);
+                                try {
+                                  const compressed = await compressImageFile(file, 1200, 750, 0.82);
+                                  setEditingProject((prev) =>
+                                    prev ? { ...prev, [slotInfo.key]: compressed } : null
+                                  );
+                                } catch (err) {
+                                  console.error('Error compressing image:', err);
+                                } finally {
+                                  setUploadingSlot(null);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+
+                        {/* Or Paste URL */}
+                        <div>
+                          <span className="block text-[11px] uppercase tracking-wider text-[#BBCCD7]/60 mb-1">
+                            Or Paste Direct Image URL:
+                          </span>
+                          <input
+                            type="text"
+                            value={currentUrl}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditingProject((prev) =>
+                                prev ? { ...prev, [slotInfo.key]: val } : null
+                              );
+                            }}
+                            placeholder="https://example.com/screenshot.png"
+                            className="w-full rounded-xl bg-[#121316] border border-[#D7E2EA]/20 px-3.5 py-2 text-xs text-[#D7E2EA] font-mono focus:outline-none focus:border-[#D7E2EA]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-4 border-t border-[#D7E2EA]/15 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultProj = DEFAULT_PROJECTS_DATA.find((p) => p.id === editingProject.id);
+                  if (defaultProj) {
+                    setEditingProject({
+                      ...editingProject,
+                      col1Image1: defaultProj.col1Image1,
+                      col1Image2: defaultProj.col1Image2,
+                      col2Image: defaultProj.col2Image
+                    });
+                  }
+                }}
+                className="text-xs uppercase tracking-wider text-[#BBCCD7]/70 hover:text-white inline-flex items-center gap-1.5 cursor-pointer bg-transparent border-0"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Reset All 3 Images to Default</span>
+              </button>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProject(null);
+                    setUploadingSlot(null);
+                  }}
+                  className="rounded-full border border-[#D7E2EA]/30 px-5 py-2.5 text-xs uppercase tracking-wider text-[#D7E2EA] hover:bg-[#D7E2EA]/10 cursor-pointer bg-transparent"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveProjectMedia(editingProject)}
+                  className="rounded-full text-white font-semibold px-6 py-2.5 text-xs uppercase tracking-wider inline-flex items-center gap-2 cursor-pointer border-0 shadow-lg"
+                  style={{
+                    background:
+                      'linear-gradient(123deg, #18011F 7%, #B600A8 37%, #7621B0 72%, #BE4C00 100%)'
+                  }}
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Save &amp; Apply Images</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
